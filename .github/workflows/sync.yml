@@ -22,9 +22,9 @@ jobs:
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
         with:
-          upstream_sync_repo: OrionTV/OrionTV # *** 这里是上游仓库的完整路径 ***
-          upstream_sync_branch: main # *** 确认上游仓库的默认分支是否为 main ***
-          target_sync_branch: main # *** 确认你的 Fork 仓库要同步的分支是否为 main ***
+          upstream_sync_repo: OrionTV/OrionTV # 请再次确认上游仓库的名称和默认分支
+          upstream_sync_branch: main # 假设上游是 main，如果不是也需要修改
+          target_sync_branch: master # *** 已修改为 master，因为你的 Fork 仓库默认分支是 master ***
           target_repo_token: ${{ secrets.GITHUB_TOKEN }} # 使用 GitHub 提供的默认 Token
 
       - name: Sync check
