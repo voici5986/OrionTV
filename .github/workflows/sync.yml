@@ -1,4 +1,4 @@
-name: Upstream Sync - Note Gen
+name: Upstream Sync - OrionTV
 
 permissions:
   contents: write
@@ -10,7 +10,7 @@ on:
 
 jobs:
   sync_latest_from_upstream:
-    name: Sync latest commits from note-gen/note-gen
+    name: Sync latest commits from OrionTV/OrionTV
     runs-on: ubuntu-latest
     if: ${{ github.event.repository.fork }} # 确保只在 Fork 仓库中运行
 
@@ -22,7 +22,7 @@ jobs:
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
         with:
-          upstream_sync_repo: note-gen/note-gen # *** 这里是上游仓库的完整路径 ***
+          upstream_sync_repo: OrionTV/OrionTV # *** 这里是上游仓库的完整路径 ***
           upstream_sync_branch: main # *** 确认上游仓库的默认分支是否为 main ***
           target_sync_branch: main # *** 确认你的 Fork 仓库要同步的分支是否为 main ***
           target_repo_token: ${{ secrets.GITHUB_TOKEN }} # 使用 GitHub 提供的默认 Token
