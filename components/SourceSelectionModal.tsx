@@ -1,14 +1,28 @@
 import React from "react";
 import { View, Text, StyleSheet, Modal, FlatList } from "react-native";
 import { StyledButton } from "./StyledButton";
+import useDetailStore from "@/stores/detailStore";
 import usePlayerStore from "@/stores/playerStore";
 
 export const SourceSelectionModal: React.FC = () => {
-  const { showSourceModal, sources, currentSourceIndex, switchSource, setShowSourceModal } = usePlayerStore();
+  const { showSourceModal, setShowSourceModal, loadVideo, currentEpisodeIndex, status } = usePlayerStore();
+  const { searchResults, detail, setDetail } = useDetailStore();
 
   const onSelectSource = (index: number) => {
-    if (index !== currentSourceIndex) {
-      switchSource(index);
+    console.log("onSelectSource", index, searchResults[index].source, detail?.source);
+    if (searchResults[index].source !== detail?.source) {
+      const newDetail = searchResults[index];
+      setDetail(newDetail);
+      
+      // Reload the video with the new source, preserving current position
+      const currentPosition = status?.isLoaded ? status.positionMillis : undefined;
+      loadVideo({
+        source: newDetail.source,
+        id: newDetail.id.toString(),
+        episodeIndex: currentEpisodeIndex,
+        title: newDetail.title,
+        position: currentPosition
+      });
     }
     setShowSourceModal(false);
   };
@@ -23,16 +37,16 @@ export const SourceSelectionModal: React.FC = () => {
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>选择播放源</Text>
           <FlatList
-            data={sources}
+            data={searchResults}
             numColumns={3}
             contentContainerStyle={styles.sourceList}
-            keyExtractor={(item, index) => `source-${item.source}-${item.id}-${index}`}
+            keyExtractor={(item, index) => `source-${item.source}-${index}`}
             renderItem={({ item, index }) => (
               <StyledButton
                 text={item.source_name}
                 onPress={() => onSelectSource(index)}
-                isSelected={currentSourceIndex === index}
-                hasTVPreferredFocus={currentSourceIndex === index}
+                isSelected={detail?.source === item.source}
+                hasTVPreferredFocus={detail?.source === item.source}
                 style={styles.sourceItem}
                 textStyle={styles.sourceItemText}
               />
@@ -70,7 +84,9 @@ const styles = StyleSheet.create({
   sourceItem: {
     paddingVertical: 2,
     margin: 4,
-    width: "31%",
+    marginLeft: 10,
+    marginRight: 8,
+    width: "30%",
   },
   sourceItemText: {
     fontSize: 14,

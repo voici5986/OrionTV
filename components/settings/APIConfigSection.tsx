@@ -6,6 +6,7 @@ import { SettingsSection } from "./SettingsSection";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import { useButtonAnimation } from "@/hooks/useAnimation";
+import { Colors } from "@/constants/Colors";
 
 interface APIConfigSectionProps {
   onChanged: () => void;
@@ -75,7 +76,7 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
               style={[styles.input, isInputFocused && styles.inputFocused]}
               value={apiBaseUrl}
               onChangeText={handleUrlChange}
-              placeholder="输入 API 地址"
+              placeholder="输入服务器地址"
               placeholderTextColor="#888"
               autoCapitalize="none"
               autoCorrect={false}
@@ -126,8 +127,8 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   inputFocused: {
-    borderColor: "#007AFF",
-    shadowColor: "#007AFF",
+    borderColor: Colors.dark.primary,
+    shadowColor: Colors.dark.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 10,

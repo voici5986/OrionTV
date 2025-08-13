@@ -4,7 +4,6 @@ import LivePlayer from "@/components/LivePlayer";
 import { fetchAndParseM3u, getPlayableUrl, Channel } from "@/services/m3u";
 import { ThemedView } from "@/components/ThemedView";
 import { StyledButton } from "@/components/StyledButton";
-import { AVPlaybackStatus } from "expo-av";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 export default function LiveScreen() {
@@ -66,15 +65,18 @@ export default function LiveScreen() {
     }
   };
 
-  const changeChannel = (direction: "next" | "prev") => {
-    if (channels.length === 0) return;
-    let newIndex =
-      direction === "next"
-        ? (currentChannelIndex + 1) % channels.length
-        : (currentChannelIndex - 1 + channels.length) % channels.length;
-    setCurrentChannelIndex(newIndex);
-    showChannelTitle(channels[newIndex].name);
-  };
+  const changeChannel = useCallback(
+    (direction: "next" | "prev") => {
+      if (channels.length === 0) return;
+      let newIndex =
+        direction === "next"
+          ? (currentChannelIndex + 1) % channels.length
+          : (currentChannelIndex - 1 + channels.length) % channels.length;
+      setCurrentChannelIndex(newIndex);
+      showChannelTitle(channels[newIndex].name);
+    },
+    [channels, currentChannelIndex]
+  );
 
   const handleTVEvent = useCallback(
     (event: HWEvent) => {
@@ -83,7 +85,7 @@ export default function LiveScreen() {
       else if (event.eventType === "left") changeChannel("prev");
       else if (event.eventType === "right") changeChannel("next");
     },
-    [channels, currentChannelIndex, isChannelListVisible]
+    [changeChannel, isChannelListVisible]
   );
 
   useTVEventHandler(handleTVEvent);
@@ -104,7 +106,7 @@ export default function LiveScreen() {
               <View style={styles.groupColumn}>
                 <FlatList
                   data={channelGroups}
-                  keyExtractor={(item) => item}
+                  keyExtractor={(item, index) => `group-${item}-${index}`}
                   renderItem={({ item }) => (
                     <StyledButton
                       text={item}
@@ -122,7 +124,7 @@ export default function LiveScreen() {
                 ) : (
                   <FlatList
                     data={groupedChannels[selectedGroup] || []}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item, index) => `${item.id}-${item.group}-${index}`}
                     renderItem={({ item }) => (
                       <StyledButton
                         text={item.name || "Unknown Channel"}
@@ -188,6 +190,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4,
     marginVertical: 4,
+    paddingLeft: 10,
+    paddingRight: 10,
   },
   groupButtonText: {
     fontSize: 13,
@@ -196,6 +200,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
     marginVertical: 3,
+    paddingLeft: 16,
+    paddingRight: 16,
   },
   channelItemText: {
     fontSize: 12,

@@ -1,23 +1,27 @@
 import React, { useEffect, useCallback, useRef, useState } from "react";
-import { View, StyleSheet, ActivityIndicator, FlatList, Pressable, Dimensions } from "react-native";
+import { View, StyleSheet, ActivityIndicator, FlatList, Pressable, Dimensions, Animated } from "react-native";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import { api } from "@/services/api";
 import VideoCard from "@/components/VideoCard.tv";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Search, Settings } from "lucide-react-native";
+import { Search, Settings, LogOut, Heart } from "lucide-react-native";
 import { StyledButton } from "@/components/StyledButton";
 import useHomeStore, { RowItem, Category } from "@/stores/homeStore";
+import useAuthStore from "@/stores/authStore";
+import CustomScrollView from "@/components/CustomScrollView";
 
 const NUM_COLUMNS = 5;
 const { width } = Dimensions.get("window");
-const ITEM_WIDTH = width / NUM_COLUMNS - 24;
+
+// Threshold for triggering load more data (in pixels)
+const LOAD_MORE_THRESHOLD = 200;
 
 export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = "dark";
-  const flatListRef = useRef<FlatList>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const {
     categories,
@@ -31,6 +35,7 @@ export default function HomeScreen() {
     selectCategory,
     refreshPlayRecords,
   } = useHomeStore();
+  const { isLoggedIn, logout } = useAuthStore();
 
   useFocusEffect(
     useCallback(() => {
@@ -41,7 +46,6 @@ export default function HomeScreen() {
   useEffect(() => {
     if (selectedCategory && !selectedCategory.tags) {
       fetchInitialData();
-      flatListRef.current?.scrollToOffset({ animated: false, offset: 0 });
     } else if (selectedCategory?.tags && !selectedCategory.tag) {
       // Category with tags selected, but no specific tag yet. Select the first one.
       const defaultTag = selectedCategory.tags[0];
@@ -53,9 +57,20 @@ export default function HomeScreen() {
   useEffect(() => {
     if (selectedCategory && selectedCategory.tag) {
       fetchInitialData();
-      flatListRef.current?.scrollToOffset({ animated: false, offset: 0 });
     }
   }, [fetchInitialData, selectedCategory, selectedCategory.tag]);
+
+  useEffect(() => {
+    if (!loading && contentData.length > 0) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else if (loading) {
+      fadeAnim.setValue(0);
+    }
+  }, [loading, contentData.length, fadeAnim]);
 
   const handleCategorySelect = (category: Category) => {
     setSelectedTag(null);
@@ -84,7 +99,7 @@ export default function HomeScreen() {
     );
   };
 
-  const renderContentItem = ({ item }: { item: RowItem }) => (
+  const renderContentItem = ({ item, index }: { item: RowItem; index: number }) => (
     <View style={styles.itemContainer}>
       <VideoCard
         id={item.id}
@@ -122,6 +137,9 @@ export default function HomeScreen() {
           </Pressable>
         </View>
         <View style={styles.rightHeaderButtons}>
+          <StyledButton style={styles.searchButton} onPress={() => router.push("/favorites")} variant="ghost">
+            <Heart color={colorScheme === "dark" ? "white" : "black"} size={24} />
+          </StyledButton>
           <StyledButton
             style={styles.searchButton}
             onPress={() => router.push({ pathname: "/search" })}
@@ -132,6 +150,11 @@ export default function HomeScreen() {
           <StyledButton style={styles.searchButton} onPress={() => router.push("/settings")} variant="ghost">
             <Settings color={colorScheme === "dark" ? "white" : "black"} size={24} />
           </StyledButton>
+          {isLoggedIn && (
+            <StyledButton style={styles.searchButton} onPress={logout} variant="ghost">
+              <LogOut color={colorScheme === "dark" ? "white" : "black"} size={24} />
+            </StyledButton>
+          )}
         </View>
       </View>
 
@@ -186,22 +209,20 @@ export default function HomeScreen() {
           </ThemedText>
         </View>
       ) : (
-        <FlatList
-          ref={flatListRef}
-          data={contentData}
-          renderItem={renderContentItem}
-          keyExtractor={(item, index) => `${item.source}-${item.id}-${index}`}
-          numColumns={NUM_COLUMNS}
-          contentContainerStyle={styles.listContent}
-          onEndReached={loadMoreData}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <ThemedText>{selectedCategory?.tags ? "请选择一个子分类" : "该分类下暂无内容"}</ThemedText>
-            </View>
-          }
-        />
+        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
+          <CustomScrollView
+            data={contentData}
+            renderItem={renderContentItem}
+            numColumns={NUM_COLUMNS}
+            loading={loading}
+            loadingMore={loadingMore}
+            error={error}
+            onEndReached={loadMoreData}
+            loadMoreThreshold={LOAD_MORE_THRESHOLD}
+            emptyMessage={selectedCategory?.tags ? "请选择一个子分类" : "该分类下暂无内容"}
+            ListFooterComponent={renderFooter}
+          />
+        </Animated.View>
       )}
     </ThemedView>
   );
@@ -236,9 +257,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   searchButton: {
-    padding: 10,
     borderRadius: 30,
-    marginLeft: 10,
   },
   // Category Selector
   categoryContainer: {
@@ -262,9 +281,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
+  contentContainer: {
+    flex: 1,
+  },
   itemContainer: {
     margin: 8,
-    width: ITEM_WIDTH,
     alignItems: "center",
   },
 });

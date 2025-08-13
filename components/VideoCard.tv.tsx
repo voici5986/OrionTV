@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, Text, Image, StyleSheet, Pressable, TouchableOpacity, Alert } from "react-native";
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
+import React, { useState, useEffect, useCallback, useRef, forwardRef } from "react";
+import { View, Text, Image, StyleSheet, TouchableOpacity, Alert, Animated } from "react-native";
 import { useRouter } from "expo-router";
-import { Heart, Star, Play, Trash2 } from "lucide-react-native";
-import { FavoriteManager, PlayRecordManager } from "@/services/storage";
-import { API, api } from "@/services/api";
+import { Star, Play } from "lucide-react-native";
+import { PlayRecordManager } from "@/services/storage";
+import { API } from "@/services/api";
 import { ThemedText } from "@/components/ThemedText";
+import { Colors } from "@/constants/Colors";
 
-interface VideoCardProps {
+interface VideoCardProps extends React.ComponentProps<typeof TouchableOpacity> {
   id: string;
   source: string;
   title: string;
@@ -24,167 +24,191 @@ interface VideoCardProps {
   api: API;
 }
 
-export default function VideoCard({
-  id,
-  source,
-  title,
-  poster,
-  year,
-  rate,
-  sourceName,
-  progress,
-  episodeIndex,
-  totalEpisodes,
-  onFocus,
-  onRecordDeleted,
-  api,
-  playTime,
-}: VideoCardProps) {
-  const router = useRouter();
-  const [isFocused, setIsFocused] = useState(false);
+const VideoCard = forwardRef<View, VideoCardProps>(
+  (
+    {
+      id,
+      source,
+      title,
+      poster,
+      year,
+      rate,
+      sourceName,
+      progress,
+      episodeIndex,
+      onFocus,
+      onRecordDeleted,
+      api,
+      playTime = 0,
+    }: VideoCardProps,
+    ref
+  ) => {
+    const router = useRouter();
+    const [isFocused, setIsFocused] = useState(false);
+    const [fadeAnim] = useState(new Animated.Value(0));
 
-  const longPressTriggered = useRef(false);
+    const longPressTriggered = useRef(false);
 
-  const scale = useSharedValue(1);
+    const scale = useRef(new Animated.Value(1)).current;
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scale.value }],
+    const animatedStyle = {
+      transform: [{ scale }],
     };
-  });
 
-  const handlePress = () => {
-    if (longPressTriggered.current) {
-      longPressTriggered.current = false;
-      return;
-    }
-    // 如果有播放进度，直接转到播放页面
-    if (progress !== undefined && episodeIndex !== undefined) {
-      router.push({
-        pathname: "/play",
-        params: { source, id, episodeIndex, position: playTime },
-      });
-    } else {
-      router.push({
-        pathname: "/detail",
-        params: { source, q: title },
-      });
-    }
-  };
+    const handlePress = () => {
+      if (longPressTriggered.current) {
+        longPressTriggered.current = false;
+        return;
+      }
+      // 如果有播放进度，直接转到播放页面
+      if (progress !== undefined && episodeIndex !== undefined) {
+        router.push({
+          pathname: "/play",
+          params: { source, id, episodeIndex: episodeIndex - 1, title, position: playTime * 1000 },
+        });
+      } else {
+        router.push({
+          pathname: "/detail",
+          params: { source, q: title },
+        });
+      }
+    };
 
-  const handleFocus = useCallback(() => {
-    setIsFocused(true);
-    scale.value = withSpring(1.05, { damping: 15, stiffness: 200 });
-    onFocus?.();
-  }, [scale, onFocus]);
+    const handleFocus = useCallback(() => {
+      setIsFocused(true);
+      Animated.spring(scale, {
+        toValue: 1.05,
+        damping: 15,
+        stiffness: 200,
+        useNativeDriver: true,
+      }).start();
+      onFocus?.();
+    }, [scale, onFocus]);
 
-  const handleBlur = useCallback(() => {
-    setIsFocused(false);
-    scale.value = withSpring(1.0);
-  }, [scale]);
+    const handleBlur = useCallback(() => {
+      setIsFocused(false);
+      Animated.spring(scale, {
+        toValue: 1.0,
+        useNativeDriver: true,
+      }).start();
+    }, [scale]);
 
-  const handleLongPress = () => {
-    // Only allow long press for items with progress (play records)
-    if (progress === undefined) return;
+    useEffect(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: Math.random() * 200, // 随机延迟创造交错效果
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim]);
 
-    longPressTriggered.current = true;
+    const handleLongPress = () => {
+      // Only allow long press for items with progress (play records)
+      if (progress === undefined) return;
 
-    // Show confirmation dialog to delete play record
-    Alert.alert("删除观看记录", `确定要删除"${title}"的观看记录吗？`, [
-      {
-        text: "取消",
-        style: "cancel",
-      },
-      {
-        text: "删除",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            // Delete from local storage
-            await PlayRecordManager.remove(source, id);
+      longPressTriggered.current = true;
 
-            // Call the onRecordDeleted callback
-            if (onRecordDeleted) {
-              onRecordDeleted();
-            }
-            // 如果没有回调函数，则使用导航刷新作为备选方案
-            else if (router.canGoBack()) {
-              router.replace("/");
-            }
-          } catch (error) {
-            console.error("Failed to delete play record:", error);
-            Alert.alert("错误", "删除观看记录失败，请重试");
-          }
+      // Show confirmation dialog to delete play record
+      Alert.alert("删除观看记录", `确定要删除"${title}"的观看记录吗？`, [
+        {
+          text: "取消",
+          style: "cancel",
         },
-      },
-    ]);
-  };
+        {
+          text: "删除",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Delete from local storage
+              await PlayRecordManager.remove(source, id);
 
-  // 是否是继续观看的视频
-  const isContinueWatching = progress !== undefined && progress > 0 && progress < 1;
+              // Call the onRecordDeleted callback
+              if (onRecordDeleted) {
+                onRecordDeleted();
+              }
+              // 如果没有回调函数，则使用导航刷新作为备选方案
+              else if (router.canGoBack()) {
+                router.replace("/");
+              }
+            } catch (error) {
+              console.info("Failed to delete play record:", error);
+              Alert.alert("错误", "删除观看记录失败，请重试");
+            }
+          },
+        },
+      ]);
+    };
 
-  return (
-    <Animated.View style={[styles.wrapper, animatedStyle]}>
-      <TouchableOpacity
-        onPress={handlePress}
-        onLongPress={handleLongPress}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        style={styles.pressable}
-        activeOpacity={1}
-        delayLongPress={1000}
-      >
-        <View style={styles.card}>
-          <Image source={{ uri: api.getImageProxyUrl(poster) }} style={styles.poster} />
-          {isFocused && (
-            <View style={styles.overlay}>
-              {isContinueWatching && (
-                <View style={styles.continueWatchingBadge}>
-                  <Play size={16} color="#ffffff" fill="#ffffff" />
-                  <ThemedText style={styles.continueWatchingText}>继续观看</ThemedText>
-                </View>
-              )}
-            </View>
-          )}
+    // 是否是继续观看的视频
+    const isContinueWatching = progress !== undefined && progress > 0 && progress < 1;
 
-          {/* 进度条 */}
-          {isContinueWatching && (
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { width: `${(progress || 0) * 100}%` }]} />
-            </View>
-          )}
+    return (
+      <Animated.View style={[styles.wrapper, animatedStyle, { opacity: fadeAnim }]}>
+        <TouchableOpacity
+          onPress={handlePress}
+          onLongPress={handleLongPress}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          style={styles.pressable}
+          activeOpacity={1}
+          delayLongPress={1000}
+        >
+          <View style={styles.card}>
+            <Image source={{ uri: api.getImageProxyUrl(poster) }} style={styles.poster} />
+            {isFocused && (
+              <View style={styles.overlay}>
+                {isContinueWatching && (
+                  <View style={styles.continueWatchingBadge}>
+                    <Play size={16} color="#ffffff" fill="#ffffff" />
+                    <ThemedText style={styles.continueWatchingText}>继续观看</ThemedText>
+                  </View>
+                )}
+              </View>
+            )}
 
-          {rate && (
-            <View style={styles.ratingContainer}>
-              <Star size={12} color="#FFD700" fill="#FFD700" />
-              <ThemedText style={styles.ratingText}>{rate}</ThemedText>
-            </View>
-          )}
-          {year && (
-            <View style={styles.yearBadge}>
-              <Text style={styles.badgeText}>{year}</Text>
-            </View>
-          )}
-          {sourceName && (
-            <View style={styles.sourceNameBadge}>
-              <Text style={styles.badgeText}>{sourceName}</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.infoContainer}>
-          <ThemedText numberOfLines={1}>{title}</ThemedText>
-          {isContinueWatching && (
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.continueLabel}>
-                第{episodeIndex! + 1}集 已观看 {Math.round((progress || 0) * 100)}%
-              </ThemedText>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
+            {/* 进度条 */}
+            {isContinueWatching && (
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressBar, { width: `${(progress || 0) * 100}%` }]} />
+              </View>
+            )}
+
+            {rate && (
+              <View style={styles.ratingContainer}>
+                <Star size={12} color="#FFD700" fill="#FFD700" />
+                <ThemedText style={styles.ratingText}>{rate}</ThemedText>
+              </View>
+            )}
+            {year && (
+              <View style={styles.yearBadge}>
+                <Text style={styles.badgeText}>{year}</Text>
+              </View>
+            )}
+            {sourceName && (
+              <View style={styles.sourceNameBadge}>
+                <Text style={styles.badgeText}>{sourceName}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.infoContainer}>
+            <ThemedText numberOfLines={1}>{title}</ThemedText>
+            {isContinueWatching && (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.continueLabel}>
+                  第{episodeIndex! + 1}集 已观看 {Math.round((progress || 0) * 100)}%
+                </ThemedText>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
+);
+
+VideoCard.displayName = "VideoCard";
+
+export default VideoCard;
 
 const CARD_WIDTH = 160;
 const CARD_HEIGHT = 240;
@@ -210,6 +234,9 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.3)",
+    borderColor: Colors.dark.primary,
+    borderWidth: 2,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -248,9 +275,9 @@ const styles = StyleSheet.create({
   infoContainer: {
     width: CARD_WIDTH,
     marginTop: 8,
-    alignItems: "flex-start", // Align items to the start
+    alignItems: "flex-start",
     marginBottom: 16,
-    paddingHorizontal: 4, // Add some padding
+    paddingHorizontal: 4,
   },
   infoRow: {
     flexDirection: "row",
@@ -291,17 +318,17 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 3,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    height: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
   },
   progressBar: {
-    height: 3,
-    backgroundColor: "#ff0000",
+    height: 4,
+    backgroundColor: Colors.dark.primary,
   },
   continueWatchingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 0, 0, 0.8)",
+    backgroundColor: Colors.dark.primary,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 5,
@@ -313,7 +340,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   continueLabel: {
-    color: "#ff5252",
+    color: Colors.dark.primary,
     fontSize: 12,
   },
 });

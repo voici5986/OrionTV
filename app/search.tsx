@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, TextInput, StyleSheet, FlatList, ActivityIndicator, Alert, Keyboard } from "react-native";
+import { View, TextInput, StyleSheet, Alert, Keyboard, TouchableOpacity, Pressable } from "react-native";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import VideoCard from "@/components/VideoCard.tv";
+import VideoLoadingAnimation from "@/components/VideoLoadingAnimation";
 import { api, SearchResult } from "@/services/api";
 import { Search, QrCode } from "lucide-react-native";
 import { StyledButton } from "@/components/StyledButton";
@@ -10,6 +11,8 @@ import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import { RemoteControlModal } from "@/components/RemoteControlModal";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useRouter } from "expo-router";
+import { Colors } from "@/constants/Colors";
+import CustomScrollView from "@/components/CustomScrollView";
 
 export default function SearchScreen() {
   const [keyword, setKeyword] = useState("");
@@ -33,13 +36,13 @@ export default function SearchScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessage]);
 
-  useEffect(() => {
-    // Focus the text input when the screen loads
-    const timer = setTimeout(() => {
-      textInputRef.current?.focus();
-    }, 200);
-    return () => clearTimeout(timer);
-  }, []);
+  // useEffect(() => {
+  //   // Focus the text input when the screen loads
+  //   const timer = setTimeout(() => {
+  //     textInputRef.current?.focus();
+  //   }, 200);
+  //   return () => clearTimeout(timer);
+  // }, []);
 
   const handleSearch = async (searchText?: string) => {
     const term = typeof searchText === "string" ? searchText : keyword;
@@ -59,7 +62,7 @@ export default function SearchScreen() {
       }
     } catch (err) {
       setError("搜索失败，请稍后重试。");
-      console.error("Search failed:", err);
+      console.info("Search failed:", err);
     } finally {
       setLoading(false);
     }
@@ -78,7 +81,7 @@ export default function SearchScreen() {
     showRemoteModal();
   };
 
-  const renderItem = ({ item }: { item: SearchResult }) => (
+  const renderItem = ({ item, index }: { item: SearchResult; index: number }) => (
     <VideoCard
       id={item.id.toString()}
       source={item.source}
@@ -93,25 +96,36 @@ export default function SearchScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.searchContainer}>
-        <TextInput
-          ref={textInputRef}
+        <TouchableOpacity
+          activeOpacity={1}
           style={[
             styles.input,
             {
               backgroundColor: colorScheme === "dark" ? "#2c2c2e" : "#f0f0f0",
-              color: colorScheme === "dark" ? "white" : "black",
-              borderColor: isInputFocused ? "#007bff" : "transparent",
+              borderColor: isInputFocused ? Colors.dark.primary : "transparent",
+              borderWidth: 2,
             },
           ]}
-          placeholder="搜索电影、剧集..."
-          placeholderTextColor={colorScheme === "dark" ? "#888" : "#555"}
-          value={keyword}
-          onChangeText={setKeyword}
+          onPress={() => textInputRef.current?.focus()}
           onFocus={() => setIsInputFocused(true)}
           onBlur={() => setIsInputFocused(false)}
-          onSubmitEditing={onSearchPress}
-          returnKeyType="search"
-        />
+        >
+          <TextInput
+            ref={textInputRef}
+            style={[
+              styles.input,
+              {
+                color: colorScheme === "dark" ? "white" : "black",
+              },
+            ]}
+            placeholder="搜索电影、剧集..."
+            placeholderTextColor={colorScheme === "dark" ? "#888" : "#555"}
+            value={keyword}
+            onChangeText={setKeyword}
+            onSubmitEditing={onSearchPress}
+            returnKeyType="search"
+          />
+        </TouchableOpacity>
         <StyledButton style={styles.searchButton} onPress={onSearchPress}>
           <Search size={24} color={colorScheme === "dark" ? "white" : "black"} />
         </StyledButton>
@@ -121,25 +135,19 @@ export default function SearchScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" />
-        </View>
+        <VideoLoadingAnimation showProgressBar={false} />
       ) : error ? (
         <View style={styles.centerContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
         </View>
       ) : (
-        <FlatList
+        <CustomScrollView
           data={results}
           renderItem={renderItem}
-          keyExtractor={(item, index) => `${item.id}-${item.source}-${index}`}
-          numColumns={5} // Adjust based on your card size and desired layout
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <ThemedText>输入关键词开始搜索</ThemedText>
-            </View>
-          }
+          numColumns={5}
+          loading={loading}
+          error={error}
+          emptyMessage="输入关键词开始搜索"
         />
       )}
       <RemoteControlModal />
