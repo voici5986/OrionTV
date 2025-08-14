@@ -6,6 +6,8 @@ import { PlayRecordManager } from "@/services/storage";
 import { API } from "@/services/api";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors } from "@/constants/Colors";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { DeviceUtils } from "@/utils/DeviceUtils";
 
 interface VideoCardProps extends React.ComponentProps<typeof TouchableOpacity> {
   id: string;
@@ -24,7 +26,7 @@ interface VideoCardProps extends React.ComponentProps<typeof TouchableOpacity> {
   api: API;
 }
 
-const VideoCard = forwardRef<View, VideoCardProps>(
+const ResponsiveVideoCard = forwardRef<View, VideoCardProps>(
   (
     {
       id,
@@ -46,9 +48,9 @@ const VideoCard = forwardRef<View, VideoCardProps>(
     const router = useRouter();
     const [isFocused, setIsFocused] = useState(false);
     const [fadeAnim] = useState(new Animated.Value(0));
+    const responsiveConfig = useResponsiveLayout();
 
     const longPressTriggered = useRef(false);
-
     const scale = useRef(new Animated.Value(1)).current;
 
     const animatedStyle = {
@@ -75,29 +77,34 @@ const VideoCard = forwardRef<View, VideoCardProps>(
     };
 
     const handleFocus = useCallback(() => {
-      setIsFocused(true);
-      Animated.spring(scale, {
-        toValue: 1.05,
-        damping: 15,
-        stiffness: 200,
-        useNativeDriver: true,
-      }).start();
+      // Only apply focus scaling for TV devices
+      if (responsiveConfig.deviceType === 'tv') {
+        setIsFocused(true);
+        Animated.spring(scale, {
+          toValue: 1.05,
+          damping: 15,
+          stiffness: 200,
+          useNativeDriver: true,
+        }).start();
+      }
       onFocus?.();
-    }, [scale, onFocus]);
+    }, [scale, onFocus, responsiveConfig.deviceType]);
 
     const handleBlur = useCallback(() => {
-      setIsFocused(false);
-      Animated.spring(scale, {
-        toValue: 1.0,
-        useNativeDriver: true,
-      }).start();
-    }, [scale]);
+      if (responsiveConfig.deviceType === 'tv') {
+        setIsFocused(false);
+        Animated.spring(scale, {
+          toValue: 1.0,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [scale, responsiveConfig.deviceType]);
 
     useEffect(() => {
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
-        delay: Math.random() * 200, // 随机延迟创造交错效果
+        duration: DeviceUtils.getAnimationDuration(400),
+        delay: Math.random() * 200, // 随机延迟创建交错效果
         useNativeDriver: true,
       }).start();
     }, [fadeAnim]);
@@ -142,25 +149,72 @@ const VideoCard = forwardRef<View, VideoCardProps>(
     // 是否是继续观看的视频
     const isContinueWatching = progress !== undefined && progress > 0 && progress < 1;
 
+    // Dynamic styles based on device type
+    const cardWidth = responsiveConfig.cardWidth;
+    const cardHeight = responsiveConfig.cardHeight;
+
+    const dynamicStyles = StyleSheet.create({
+      wrapper: {
+        marginHorizontal: responsiveConfig.spacing / 2,
+      },
+      card: {
+        width: cardWidth,
+        height: cardHeight,
+        borderRadius: responsiveConfig.deviceType === 'mobile' ? 8 : responsiveConfig.deviceType === 'tablet' ? 10 : 8,
+        backgroundColor: "#222",
+        overflow: "hidden",
+      },
+      infoContainer: {
+        width: cardWidth,
+        marginTop: responsiveConfig.spacing / 2,
+        alignItems: "flex-start",
+        marginBottom: responsiveConfig.spacing,
+        paddingHorizontal: 4,
+      },
+      overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(0,0,0,0.3)",
+        borderColor: Colors.dark.primary,
+        borderWidth: responsiveConfig.deviceType === 'tv' ? 2 : 0,
+        borderRadius: responsiveConfig.deviceType === 'mobile' ? 8 : responsiveConfig.deviceType === 'tablet' ? 10 : 8,
+        justifyContent: "center",
+        alignItems: "center",
+      },
+      continueWatchingBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: Colors.dark.primary,
+        paddingHorizontal: responsiveConfig.deviceType === 'mobile' ? 8 : 10,
+        paddingVertical: responsiveConfig.deviceType === 'mobile' ? 4 : 5,
+        borderRadius: 5,
+      },
+      continueWatchingText: {
+        color: "white",
+        marginLeft: 5,
+        fontSize: responsiveConfig.deviceType === 'mobile' ? 10 : 12,
+        fontWeight: "bold",
+      },
+    });
+
     return (
-      <Animated.View style={[styles.wrapper, animatedStyle, { opacity: fadeAnim }]}>
+      <Animated.View style={[dynamicStyles.wrapper, animatedStyle, { opacity: fadeAnim }]}>
         <TouchableOpacity
           onPress={handlePress}
           onLongPress={handleLongPress}
           onFocus={handleFocus}
           onBlur={handleBlur}
           style={styles.pressable}
-          activeOpacity={1}
-          delayLongPress={1000}
+          activeOpacity={responsiveConfig.deviceType === 'tv' ? 1 : 0.8}
+          delayLongPress={responsiveConfig.deviceType === 'mobile' ? 500 : 1000}
         >
-          <View style={styles.card}>
+          <View style={dynamicStyles.card}>
             <Image source={{ uri: api.getImageProxyUrl(poster) }} style={styles.poster} />
-            {isFocused && (
-              <View style={styles.overlay}>
+            {(isFocused && responsiveConfig.deviceType === 'tv') && (
+              <View style={dynamicStyles.overlay}>
                 {isContinueWatching && (
-                  <View style={styles.continueWatchingBadge}>
-                    <Play size={16} color="#ffffff" fill="#ffffff" />
-                    <ThemedText style={styles.continueWatchingText}>继续观看</ThemedText>
+                  <View style={dynamicStyles.continueWatchingBadge}>
+                    <Play size={responsiveConfig.deviceType === 'tv' ? 16 : 12} color="#ffffff" fill="#ffffff" />
+                    <ThemedText style={dynamicStyles.continueWatchingText}>继续观看</ThemedText>
                   </View>
                 )}
               </View>
@@ -174,28 +228,53 @@ const VideoCard = forwardRef<View, VideoCardProps>(
             )}
 
             {rate && (
-              <View style={styles.ratingContainer}>
-                <Star size={12} color="#FFD700" fill="#FFD700" />
-                <ThemedText style={styles.ratingText}>{rate}</ThemedText>
+              <View style={[styles.ratingContainer, { 
+                top: responsiveConfig.spacing / 2,
+                right: responsiveConfig.spacing / 2 
+              }]}>
+                <Star size={responsiveConfig.deviceType === 'mobile' ? 10 : 12} color="#FFD700" fill="#FFD700" />
+                <ThemedText style={[styles.ratingText, { 
+                  fontSize: responsiveConfig.deviceType === 'mobile' ? 10 : 12 
+                }]}>{rate}</ThemedText>
               </View>
             )}
             {year && (
-              <View style={styles.yearBadge}>
-                <Text style={styles.badgeText}>{year}</Text>
+              <View style={[styles.yearBadge, { 
+                top: responsiveConfig.spacing / 2,
+                right: responsiveConfig.spacing / 2 
+              }]}>
+                <Text style={[styles.badgeText, { 
+                  fontSize: responsiveConfig.deviceType === 'mobile' ? 10 : 12 
+                }]}>{year}</Text>
               </View>
             )}
             {sourceName && (
-              <View style={styles.sourceNameBadge}>
-                <Text style={styles.badgeText}>{sourceName}</Text>
+              <View style={[styles.sourceNameBadge, { 
+                top: responsiveConfig.spacing / 2,
+                left: responsiveConfig.spacing / 2 
+              }]}>
+                <Text style={[styles.badgeText, { 
+                  fontSize: responsiveConfig.deviceType === 'mobile' ? 10 : 12 
+                }]}>{sourceName}</Text>
               </View>
             )}
           </View>
-          <View style={styles.infoContainer}>
-            <ThemedText numberOfLines={1}>{title}</ThemedText>
+          <View style={dynamicStyles.infoContainer}>
+            <ThemedText 
+              numberOfLines={responsiveConfig.deviceType === 'mobile' ? 2 : 1}
+              style={{ 
+                fontSize: responsiveConfig.deviceType === 'mobile' ? 14 : 16,
+                lineHeight: responsiveConfig.deviceType === 'mobile' ? 18 : 20,
+              }}
+            >
+              {title}
+            </ThemedText>
             {isContinueWatching && (
               <View style={styles.infoRow}>
-                <ThemedText style={styles.continueLabel}>
-                  第{episodeIndex}集 已观看 {Math.round((progress || 0) * 100)}%
+                <ThemedText style={[styles.continueLabel, { 
+                  fontSize: responsiveConfig.deviceType === 'mobile' ? 10 : 12 
+                }]}>
+                  第{episodeIndex! + 1}集 已观看 {Math.round((progress || 0) * 100)}%
                 </ThemedText>
               </View>
             )}
@@ -206,39 +285,17 @@ const VideoCard = forwardRef<View, VideoCardProps>(
   }
 );
 
-VideoCard.displayName = "VideoCard";
+ResponsiveVideoCard.displayName = "ResponsiveVideoCard";
 
-export default VideoCard;
-
-const CARD_WIDTH = 160;
-const CARD_HEIGHT = 240;
+export default ResponsiveVideoCard;
 
 const styles = StyleSheet.create({
-  wrapper: {
-    marginHorizontal: 8,
-  },
   pressable: {
     alignItems: "center",
-  },
-  card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    borderRadius: 8,
-    backgroundColor: "#222",
-    overflow: "hidden",
   },
   poster: {
     width: "100%",
     height: "100%",
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    borderColor: Colors.dark.primary,
-    borderWidth: 2,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
   },
   buttonRow: {
     position: "absolute",
@@ -257,8 +314,6 @@ const styles = StyleSheet.create({
   },
   ratingContainer: {
     position: "absolute",
-    top: 8,
-    right: 8,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.7)",
@@ -268,16 +323,8 @@ const styles = StyleSheet.create({
   },
   ratingText: {
     color: "#FFD700",
-    fontSize: 12,
     fontWeight: "bold",
     marginLeft: 4,
-  },
-  infoContainer: {
-    width: CARD_WIDTH,
-    marginTop: 8,
-    alignItems: "flex-start",
-    marginBottom: 16,
-    paddingHorizontal: 4,
   },
   infoRow: {
     flexDirection: "row",
@@ -292,8 +339,6 @@ const styles = StyleSheet.create({
   },
   yearBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     borderRadius: 6,
     paddingHorizontal: 6,
@@ -301,8 +346,6 @@ const styles = StyleSheet.create({
   },
   sourceNameBadge: {
     position: "absolute",
-    top: 8,
-    left: 8,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     borderRadius: 6,
     paddingHorizontal: 6,
@@ -310,7 +353,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: "white",
-    fontSize: 12,
     fontWeight: "bold",
   },
   progressContainer: {
@@ -325,22 +367,7 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: Colors.dark.primary,
   },
-  continueWatchingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-  },
-  continueWatchingText: {
-    color: "white",
-    marginLeft: 5,
-    fontSize: 12,
-    fontWeight: "bold",
-  },
   continueLabel: {
     color: Colors.dark.primary,
-    fontSize: 12,
   },
 });
